@@ -7,6 +7,7 @@
  */
 
 import {format as formatUrl} from 'node:url';
+import {deprecate} from 'node:util';
 import Headers from './headers.js';
 import Body, {clone, extractContentType, getTotalBytes} from './body.js';
 import {isAbortSignal} from './utils/is.js';
@@ -30,6 +31,10 @@ const isRequest = object => {
 	);
 };
 
+const doBadDataWarn = deprecate(() => {},
+	'.data is not a valid RequestInit property, use .body instead',
+	'https://github.com/node-fetch/node-fetch/issues/1000 (request)');
+
 /**
  * Request class
  *
@@ -52,14 +57,18 @@ export default class Request extends Body {
 		}
 
 		if (parsedURL.username !== '' || parsedURL.password !== '') {
-			throw new TypeError(`${parsedURL} is an url with embedded credentails.`);
+			throw new TypeError(`${parsedURL} is an url with embedded credentials.`);
 		}
 
 		let method = init.method || input.method || 'GET';
 		method = method.toUpperCase();
 
+		if ('data' in init) {
+			doBadDataWarn();
+		}
+
 		// eslint-disable-next-line no-eq-null, eqeqeq
-		if (((init.body != null || isRequest(input)) && input.body !== null) &&
+		if ((init.body != null || (isRequest(input) && input.body !== null)) &&
 			(method === 'GET' || method === 'HEAD')) {
 			throw new TypeError('Request with GET/HEAD method cannot have body');
 		}

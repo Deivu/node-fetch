@@ -1,7 +1,7 @@
-import http from 'http';
-import zlib from 'zlib';
-import {once} from 'events';
-import Busboy from 'busboy';
+import http from 'node:http';
+import zlib from 'node:zlib';
+import {once} from 'node:events';
+import busboy from 'busboy';
 
 export default class TestServer {
 	constructor(hostname) {
@@ -179,6 +179,13 @@ export default class TestServer {
 			});
 		}
 
+		if (p === '/empty/deflate') {
+			res.statusCode = 200;
+			res.setHeader('Content-Type', 'text/plain');
+			res.setHeader('Content-Encoding', 'deflate');
+			res.end();
+		}
+
 		if (p === '/sdch') {
 			res.statusCode = 200;
 			res.setHeader('Content-Type', 'text/plain');
@@ -236,6 +243,24 @@ export default class TestServer {
 		if (p === '/redirect/301') {
 			res.statusCode = 301;
 			res.setHeader('Location', '/inspect');
+			res.end();
+		}
+
+		if (p === '/redirect/301/invalid') {
+			res.statusCode = 301;
+			res.setHeader('Location', '//super:invalid:url%/');
+			res.end();
+		}
+
+		if (p.startsWith('/redirect-to/3')) {
+			res.statusCode = p.slice(13, 16);
+			res.setHeader('Location', p.slice(17));
+			res.end();
+		}
+
+		if (p === '/redirect/301/otherhost') {
+			res.statusCode = 301;
+			res.setHeader('Location', 'https://github.com/node-fetch');
 			res.end();
 		}
 
@@ -297,7 +322,7 @@ export default class TestServer {
 		}
 
 		if (p === '/redirect/bad-location') {
-			res.socket.write('HTTP/1.1 301\r\nLocation: ☃\r\nContent-Length: 0\r\n');
+			res.socket.write('HTTP/1.1 301\r\nLocation: <>\r\nContent-Length: 0\r\n');
 			res.socket.end('\r\n');
 		}
 
@@ -440,21 +465,20 @@ export default class TestServer {
 		}
 
 		if (p === '/multipart') {
+			let body = '';
 			res.statusCode = 200;
 			res.setHeader('Content-Type', 'application/json');
-			const busboy = new Busboy({headers: request.headers});
-			let body = '';
-			busboy.on('file', async (fieldName, file, fileName) => {
-				body += `${fieldName}=${fileName}`;
+			const bb = busboy({headers: request.headers});
+			bb.on('file', async (fieldName, file, info) => {
+				body += `${fieldName}=${info.filename}`;
 				// consume file data
 				// eslint-disable-next-line no-empty, no-unused-vars
 				for await (const c of file) {}
 			});
-
-			busboy.on('field', (fieldName, value) => {
+			bb.on('field', (fieldName, value) => {
 				body += `${fieldName}=${value}`;
 			});
-			busboy.on('finish', () => {
+			bb.on('close', () => {
 				res.end(JSON.stringify({
 					method: request.method,
 					url: request.url,
@@ -462,7 +486,7 @@ export default class TestServer {
 					body
 				}));
 			});
-			request.pipe(busboy);
+			request.pipe(bb);
 		}
 
 		if (p === '/m%C3%B6bius') {
